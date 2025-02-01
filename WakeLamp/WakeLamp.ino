@@ -85,8 +85,8 @@ void setup() {
 // }
 
 void loop() {
-  brighten();
-  darken();
+  // brighten();
+  // darken();
   DateTime now = rtc.now();
 
   Serial.print(now.year(), DEC);
@@ -110,6 +110,12 @@ void loop() {
   Serial.print(now.unixtime() / 86400L);
   Serial.println("d");
 
+  if (now.hour() == 9){
+    brighten();
+  }
+  if (now.hour() == 20){
+    darken();
+  }
   // calculate a date which is 7 days, 12 hours and 30 seconds into the future
   DateTime future (now + TimeSpan(7,12,30,6));
 
