@@ -1,3 +1,5 @@
+// #include <Arduino_BuiltIn.h>
+
 #include <RTClib.h>
 
 
@@ -11,12 +13,25 @@
 
 #include <Adafruit_NeoPixel.h>
 
-#define PIN_NEO_PIXEL 14  // The ESP32 pin GPIO16 connected to NeoPixel
+#define PIN_NEO_PIXEL 4  // The ESP32 pin GPIO16 connected to NeoPixel
 #define NUM_PIXELS 144     // The number of LEDs (pixels) on NeoPixel LED strip
 
 Adafruit_NeoPixel NeoPixel(NUM_PIXELS, PIN_NEO_PIXEL, NEO_GRB + NEO_KHZ800);
 
 RTC_PCF8523 rtc;
+
+const int riseDur = 120; //how long you want full brightness to take in minutes
+int riseHour = 6;
+int riseMin = 30;
+int setHour = 18;
+int setMin = 30;
+
+bool brighten = false;
+bool darken = false;
+uint16_t r = 0;
+uint16_t g = 0;
+uint16_t b = 0;
+uint16_t master = 0;
 
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
@@ -26,9 +41,9 @@ void setup() {
   //NeoPixel.setBrightness(255);
   
 
-#ifndef ESP8266
-  while (!Serial); // wait for serial port to connect. Needed for native USB
-#endif
+  #ifndef ESP8266
+    while (!Serial); // wait for serial port to connect. Needed for native USB
+  #endif
 
   if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
@@ -69,25 +84,30 @@ void setup() {
   NeoPixel.show();
 }
 
-// void loop() {
-//   uint32_t fullBright = 0;
-//   NeoPixel.clear();  // set all pixel colors to 'off'. It only takes effect if pixels.show() is called
-
-//   for (uint8_t bright = 120; bright >= 0; bright = bright - 1){
-//     //NeoPixel.setBrightness(bright);
-//     for (int pixel = 0; pixel < NUM_PIXELS; pixel++) {           // for each pixel
-//       NeoPixel.setPixelColor(pixel, NeoPixel.Color(bright, bright, bright));  // it only takes effect if pixels.show() is called
-//     }
-//     NeoPixel.show();
-//     delay(5);
-//   }
-
-// }
-
 void loop() {
+  static DateTime nextStep = rtc.now();
+
+  int totRiseStart = (riseHour * 60) + riseMin;
+  int totRiseDone = totRiseStart + riseDur;
+  int totSetStart = (setHour * 60) + setMin;
+  int totSetDone = totSetStart + riseDur;
+  int totCurTime = 0;
+
+  uint32_t stepMsecs = (riseDur * 60 * 1000) / 255;
+  uint32_t stepSecs = 0;
+
+
+  if (stepMsecs >= 1000){
+    stepSecs = stepMsecs / 1000;
+    stepMsecs = stepMsecs % 1000;
+  }
   // brighten();
   // darken();
   DateTime now = rtc.now();
+
+  // analogWrite(2, 125);
+
+  totCurTime = (now.hour()*60)+now.minute();
 
   Serial.print(now.year(), DEC);
   Serial.print('/');
@@ -104,59 +124,125 @@ void loop() {
   Serial.print(now.second(), DEC);
   Serial.println();
 
-  Serial.print(" since midnight 1/1/1970 = ");
-  Serial.print(now.unixtime());
-  Serial.print("s = ");
-  Serial.print(now.unixtime() / 86400L);
-  Serial.println("d");
+  // Serial.print(" since midnight 1/1/1970 = ");
+  // Serial.print(now.unixtime());
+  // Serial.print("s = ");
+  // Serial.print(now.unixtime() / 86400L);
+  // Serial.println("d");
 
-  if (now.hour() == 9){
-    brighten();
-  }
-  if (now.hour() == 20){
-    darken();
-  }
-  // calculate a date which is 7 days, 12 hours and 30 seconds into the future
-  DateTime future (now + TimeSpan(7,12,30,6));
-
-  Serial.print(" now + 7d + 12h + 30m + 6s: ");
-  Serial.print(future.year(), DEC);
-  Serial.print('/');
-  Serial.print(future.month(), DEC);
-  Serial.print('/');
-  Serial.print(future.day(), DEC);
-  Serial.print(' ');
-  Serial.print(future.hour(), DEC);
-  Serial.print(':');
-  Serial.print(future.minute(), DEC);
-  Serial.print(':');
-  Serial.print(future.second(), DEC);
+  Serial.print("Current Time: ");
+  Serial.print(totCurTime);
+  Serial.print(", Rise Time: ");
+  Serial.print(totRiseStart);
   Serial.println();
+  Serial.print("Rise Finish By: ");
+  Serial.println(totRiseDone);
+
+  Serial.print("Brighten: ");
+  Serial.println(brighten);
+
+
+  Serial.print("Set Time: ");
+  Serial.print(totSetStart);
+  Serial.println();
+  Serial.print("Set Finish By: ");
+  Serial.println(totSetDone);
+  Serial.print("darken: ");
+  Serial.println(darken);
+
+  Serial.print("r = ");
+  Serial.println(r);
+
+  if (totCurTime >= totRiseStart && totCurTime < totRiseDone){
+    //brighten();
+    brighten = true;
+    Serial.println("Setting Brighten");
+  }
+  else if ((totCurTime >= totRiseDone) && (totCurTime < totSetStart)){
+    brighten = false;
+    Serial.println("Clearing Brighten");
+    r = 255;//set brightness to full
+    g = 255;
+    b = 255;
+    master = 255;
+  }
+  else if ((totCurTime >= totSetStart) && (totCurTime < totSetDone)){
+    darken = true;
+    Serial.println("Setting Darken");
+  }
+  else if ((totCurTime >= totSetDone) || (totCurTime < totRiseStart)){
+    darken == false;
+    r = 0;//set to black
+    g = 0;
+    b = 0;
+    master = 0;
+    Serial.println("Clearing Darken");
+  }
+
+
+  if (now >= nextStep){
+    if (darken == true){
+      if (r > 0)
+      {
+        r = r - 1;
+        g = g - 1;
+        b = b - 1;
+        master = master - 1;
+      }
+    }
+    else if (brighten == true){
+      if (r < 255)
+      {
+        r = r + 1;
+        g = g + 1;
+        b = b + 1;
+        master = master + 1;
+      }
+    }
+    delay(stepMsecs);
+    nextStep = rtc.now() + TimeSpan(0,0,0,stepSecs);
+  }
 
   Serial.println();
-  delay(3000);
+  // // updateStrip(r, g, b);
+  // darkenF();
+  // delay(3000);
+  // brightenF();
+  // delay(3000);
+  analogWrite(15, master);
+  updateStrip(r, g, b);
+}
+
+void updateStrip(uint16_t r, uint16_t g, uint16_t b) {
+  for (int i = 0; i < NeoPixel.numPixels(); i++)
+  {
+    NeoPixel.setPixelColor(i, r, g, b);
+  }
+  //NeoPixel.clear();
+  NeoPixel.show();
 }
 
 // 0 to 255
-void brighten() {
+void brightenF() {
   uint16_t i, j;
 
-  for (j = 1; j <= 100; j++) {
+  for (j = 1; j <= 255; j++) {
     for (i = 0; i < NeoPixel.numPixels(); i++) {
       NeoPixel.setPixelColor(i, j, j, j);
     }
     NeoPixel.show();
-    delay(10);
+    delay(50);
   }
   //delay(1500);
 }
 
 // 255 to 0
-void darken() {
+void darkenF() {
   //Serial.begin(9600);
-  uint16_t i, j;
+  uint16_t i;
+  uint8_t j;
 
-  for (j = 100; j >= 1; j--) {
+  for (j = 255; j >= 1; j--) {
     for (i = 0; i < NeoPixel.numPixels(); i++) {
       NeoPixel.setPixelColor(i, j, j, j);
     }
@@ -164,7 +250,5 @@ void darken() {
     delay(10);
     Serial.println(j);
   }
-  NeoPixel.clear();
-  NeoPixel.show();
   delay(1500);
 }
