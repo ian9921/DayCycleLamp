@@ -1,3 +1,5 @@
+#include <RBDdimmer.h>
+
 // #include <Arduino_BuiltIn.h>
 
 #include <RTClib.h>
@@ -13,12 +15,23 @@
 
 #include <Adafruit_NeoPixel.h>
 
+// #include "RBDdimmer.h"
+
+//#define USE_SERIAL  SerialUSB //Serial for boards whith USB serial port
+//#define USE_SERIAL  Serial
+#define outputPin  27
+#define zerocross  39 // for boards with CHANGEBLE input pins
+
 #define PIN_NEO_PIXEL 4  // The ESP32 pin GPIO16 connected to NeoPixel
 #define NUM_PIXELS 144     // The number of LEDs (pixels) on NeoPixel LED strip
 
 Adafruit_NeoPixel NeoPixel(NUM_PIXELS, PIN_NEO_PIXEL, NEO_GRB + NEO_KHZ800);
 
 RTC_PCF8523 rtc;
+
+dimmerLamp dimmer(outputPin, zerocross); //initialase port for dimmer for MEGA, Leonardo, UNO, Arduino M0, Arduino Zero
+
+int mainLight = 0;
 
 const int riseDur = 120; //how long you want full brightness to take in minutes
 int riseHour = 6;
@@ -37,6 +50,7 @@ char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursd
 
 void setup() {
   Serial.begin(57600);
+  dimmer.begin(NORMAL_MODE, ON);
 
   //NeoPixel.setBrightness(255);
   
@@ -95,7 +109,6 @@ void loop() {
 
   uint32_t stepMsecs = (riseDur * 60 * 1000) / 255;
   uint32_t stepSecs = 0;
-
 
   if (stepMsecs >= 1000){
     stepSecs = stepMsecs / 1000;
@@ -209,8 +222,12 @@ void loop() {
   // delay(3000);
   // brightenF();
   // delay(3000);
-  analogWrite(15, master);
+  mainLight = r / 2.55;
+  Serial.print("Main Light: ");
+  Serial.println(mainLight);
   updateStrip(r, g, b);
+  dimmer.setPower(mainLight);
+  Serial.println(dimmer.getPower());
 }
 
 void updateStrip(uint16_t r, uint16_t g, uint16_t b) {
