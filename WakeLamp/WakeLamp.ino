@@ -195,22 +195,40 @@ void loop() {
 
   if (now >= nextStep){
     if (darken == true){
-      if (r > 0)
-      {
-        r = r - 1;
-        g = g - 1;
-        b = b - 1;
-        master = master - 1;
+      // if (r > 0)
+      // {
+      //   r = r - 1;
+      //   if (b > 0)
+      //   {
+      //     g = g - 2;
+      //     b = b - 2;
+      //   }
+      //   master = master - 1;
+      // }
+      if (g > 0){
+        g = g - 3;
+        if (b > 165){
+          b = b - 3;
+        }
+      } else if (b > 0){
+        b = b - 3;
+      } else if (r > 0){
+        r = r - 3;
       }
     }
     else if (brighten == true){
       if (r < 255)
       {
-        r = r + 1;
-        g = g + 1;
-        b = b + 1;
-        master = master + 1;
+        r = r + 3;
+      } else if (b < 165) {
+        b = b + 3;
+      } else if (g < 255){
+        g = g + 3;
+        if (b < 255){
+          b = b + 3;
+        }
       }
+      master = master + 1;
     }
     delay(stepMsecs);
     nextStep = rtc.now() + TimeSpan(0,0,0,stepSecs);
