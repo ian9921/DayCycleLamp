@@ -31,6 +31,8 @@ RTC_PCF8523 rtc;
 
 dimmerLamp dimmer(outputPin, zerocross); //initialase port for dimmer for MEGA, Leonardo, UNO, Arduino M0, Arduino Zero
 
+
+
 int mainLight = 0;
 
 const int riseDur = 120; //how long you want full brightness to take in minutes
@@ -205,13 +207,13 @@ void loop() {
       //   }
       //   master = master - 1;
       // }
-      if (g > 0){
-        g = g - 3;
-        if (b > 165){
-          b = b - 3;
-        }
-      } else if (b > 0){
+      if (b > 0){
         b = b - 3;
+        if (g > 64){
+          g = g - 3;
+        }
+      } else if (g > 0){
+        g = g - 3;
       } else if (r > 0){
         r = r - 3;
       }
@@ -244,7 +246,10 @@ void loop() {
   Serial.print("Main Light: ");
   Serial.println(mainLight);
   updateStrip(r, g, b);
-  dimmer.setPower(mainLight);
+  if ((mainLight >= 10) || (mainLight == 0)){
+    dimmer.setPower(mainLight);
+  }
+  
   Serial.println(dimmer.getPower());
 }
 
