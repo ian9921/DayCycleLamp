@@ -217,6 +217,9 @@ void loop() {
       } else if (r > 0){
         r = r - 3;
       }
+      if (master > 0){
+        master = master - 1;
+      }
     }
     else if (brighten == true){
       if (r < 255)
@@ -230,7 +233,9 @@ void loop() {
           b = b + 3;
         }
       }
-      master = master + 1;
+      if (master < 255){
+        master = master + 1;
+      }
     }
     delay(stepMsecs);
     nextStep = rtc.now() + TimeSpan(0,0,0,stepSecs);
@@ -242,7 +247,7 @@ void loop() {
   // delay(3000);
   // brightenF();
   // delay(3000);
-  mainLight = r / 2.55;
+  mainLight = master / 2.55;
   Serial.print("Main Light: ");
   Serial.println(mainLight);
   updateStrip(r, g, b);
