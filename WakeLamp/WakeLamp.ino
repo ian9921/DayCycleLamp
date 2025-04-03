@@ -225,12 +225,12 @@ void loop() {
       if (r < 255)
       {
         r = r + 3;
-      } else if (b < 165) {
-        b = b + 3;
-      } else if (g < 255){
+      } else if (g < 64) {
         g = g + 3;
+      } else if (b < 255){
+        b = b + 3;
         if (b < 255){
-          b = b + 3;
+          g = g + 3;
         }
       }
       if (master < 255){
