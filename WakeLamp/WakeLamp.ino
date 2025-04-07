@@ -1,3 +1,14 @@
+#include <WiFi.h>
+#include <WiFiAP.h>
+#include <WiFiClient.h>
+#include <WiFiGeneric.h>
+#include <WiFiMulti.h>
+#include <WiFiSTA.h>
+#include <WiFiScan.h>
+#include <WiFiServer.h>
+#include <WiFiType.h>
+#include <WiFiUdp.h>
+
 #include <RBDdimmer.h>
 
 // #include <Arduino_BuiltIn.h>
@@ -25,13 +36,20 @@
 #define PIN_NEO_PIXEL 4  // The ESP32 pin GPIO16 connected to NeoPixel
 #define NUM_PIXELS 144     // The number of LEDs (pixels) on NeoPixel LED strip
 
+#define HEADER_BUFFER_SIZE 512
+#define LINE_BUFFER_SIZE 128
+#define STATUS_BUFFER_SIZE 64
+
 Adafruit_NeoPixel NeoPixel(NUM_PIXELS, PIN_NEO_PIXEL, NEO_GRB + NEO_KHZ800);
 
 RTC_PCF8523 rtc;
 
 dimmerLamp dimmer(outputPin, zerocross); //initialase port for dimmer for MEGA, Leonardo, UNO, Arduino M0, Arduino Zero
 
+const char* ssid = "DayCycleLamp";
+const char* password = "123456789";
 
+WiFiServer server(80);
 
 int mainLight = 0;
 
@@ -46,9 +64,18 @@ bool darken = false;
 uint16_t r = 0;
 uint16_t g = 0;
 uint16_t b = 0;
-uint16_t master = 0;
+uint32_t master = 0;
 
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
+char header[HEADER_BUFFER_SIZE] = {0};
+char currentLine[LINE_BUFFER_SIZE] = {0};
+char statusMessage[STATUS_BUFFER_SIZE] = "Ready";
+char currentFunction[16] = "none";
+
+// Indices for buffers
+int headerIndex = 0;
+int currentLineIndex = 0;
 
 void setup() {
   Serial.begin(57600);
@@ -98,6 +125,22 @@ void setup() {
   Serial.print("Offset is "); Serial.println(offset); // Print to control offset
   NeoPixel.begin();  // initialize NeoPixel strip object (REQUIRED)
   NeoPixel.show();
+  //WiFi.config(IPAddress(10, 0, 0, 1));
+  WiFi.softAP(ssid, password);
+
+  IPAddress IP = WiFi.softAPIP();
+
+  server.begin();
+
+  while(riseMin >= 60){
+    riseMin = riseMin - 60;
+    riseHour = riseHour + 1;
+  }
+
+  while(setMin >= 60){
+    setMin = setMin - 60;
+    setHour = setHour + 1;
+  }
 }
 
 void loop() {
@@ -109,8 +152,18 @@ void loop() {
   int totSetDone = totSetStart + riseDur;
   int totCurTime = 0;
 
-  uint32_t stepMsecs = (riseDur * 60 * 1000) / 255;
+  uint32_t stepMsecs = (riseDur * 60 * 1000) / (255*3);
   uint32_t stepSecs = 0;
+
+  int dispRiseHour = riseHour;
+  int dispSetHour = setHour;
+
+  // if (dispRiseHour > 12){
+  //   dispRiseHour = dispRiseHour - 12;
+  // }
+  // if(dispSetHour > 12){
+  //   dispSetHour = dispSetHour - 12;
+  // }
 
   if (stepMsecs >= 1000){
     stepSecs = stepMsecs / 1000;
@@ -168,6 +221,16 @@ void loop() {
   Serial.print("r = ");
   Serial.println(r);
 
+  Serial.print("g = ");
+  Serial.println(g);
+
+  Serial.print("g = ");
+  Serial.println(g);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
+
   if (totCurTime >= totRiseStart && totCurTime < totRiseDone){
     //brighten();
     brighten = true;
@@ -179,7 +242,7 @@ void loop() {
     r = 255;//set brightness to full
     g = 255;
     b = 255;
-    master = 255;
+    master = 255*3;
   }
   else if ((totCurTime >= totSetStart) && (totCurTime < totSetDone)){
     darken = true;
@@ -208,33 +271,33 @@ void loop() {
       //   master = master - 1;
       // }
       if (b > 0){
-        b = b - 3;
+        b = b - 1;
         if (g > 64){
-          g = g - 3;
+          g = g - 1;
         }
       } else if (g > 0){
-        g = g - 3;
+        g = g - 1;
       } else if (r > 0){
-        r = r - 3;
+        r = r - 1;
       }
       if (master > 0){
-        master = master - 1;
+        master = master - 3;
       }
     }
     else if (brighten == true){
       if (r < 255)
       {
-        r = r + 3;
+        r = r + 1;
       } else if (g < 64) {
-        g = g + 3;
+        g = g + 1;
       } else if (b < 255){
-        b = b + 3;
+        b = b + 1;
         if (b < 255){
-          g = g + 3;
+          g = g + 1;
         }
       }
-      if (master < 255){
-        master = master + 1;
+      if (master < (255*3)){
+        master = master + 3;
       }
     }
     delay(stepMsecs);
@@ -256,6 +319,205 @@ void loop() {
   }
   
   Serial.println(dimmer.getPower());
+
+  WiFiClient client = server.available();
+  if (client) {                             // If a new client connects,
+    Serial.println("New Client.");          // print a message out in the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        currentLine += c;
+        if (c == '\n') {                    // if the byte is a newline character
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 2) {
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println("Connection: close");
+            client.println();
+
+            // Send your "Hello World" HTML response
+            client.println("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+            client.println(F("<style>"));
+            client.println(F("body { font-family: Arial, sans-serif; text-align: center; background-color: #f0f0f0; }"));
+            client.println(F("h1 { color: #333; }"));
+            //rise buttons
+            client.println(F(".button {"));
+            client.println(F("  display: inline-block;"));
+            client.println(F("  padding: 15px 30px;"));
+            client.println(F("  margin: 10px;"));
+            client.println(F("  font-size: 18px;"));
+            client.println(F("  color: #fff;"));
+            client.println(F("  background-color: #007BFF;"));
+            client.println(F("  border: none;"));
+            client.println(F("  border-radius: 5px;"));
+            client.println(F("  cursor: pointer;"));
+            client.println(F("}"));
+            client.println(F(".button:hover { background-color: #007bff; }"));
+            //Set Buttons
+            client.println(F(".button2 {"));
+            client.println(F("  display: inline-block;"));
+            client.println(F("  padding: 15px 30px;"));
+            client.println(F("  margin: 10px;"));
+            client.println(F("  font-size: 18px;"));
+            client.println(F("  color: #fff;"));
+            client.println(F("  background-color: #eba434;"));
+            client.println(F("  border: none;"));
+            client.println(F("  border-radius: 5px;"));
+            client.println(F("  cursor: pointer;"));
+            client.println(F("}"));
+            client.println(F(".button2:hover { background-color: #eba434; }"));
+            //duration buttons Up
+            client.println(F(".button3 {"));
+            client.println(F("  display: inline-block;"));
+            client.println(F("  padding: 15px 30px;"));
+            client.println(F("  margin: 10px;"));
+            client.println(F("  font-size: 18px;"));
+            client.println(F("  color: #fff;"));
+            client.println(F("  background-color: #24e037;"));
+            client.println(F("  border: none;"));
+            client.println(F("  border-radius: 5px;"));
+            client.println(F("  cursor: pointer;"));
+            client.println(F("}"));
+            client.println(F(".button3:hover { background-color: #24e037; }"));
+            //duration buttons Down
+            client.println(F(".button4 {"));
+            client.println(F("  display: inline-block;"));
+            client.println(F("  padding: 15px 30px;"));
+            client.println(F("  margin: 10px;"));
+            client.println(F("  font-size: 18px;"));
+            client.println(F("  color: #fff;"));
+            client.println(F("  background-color: #1a471f;"));
+            client.println(F("  border: none;"));
+            client.println(F("  border-radius: 5px;"));
+            client.println(F("  cursor: pointer;"));
+            client.println(F("}"));
+            client.println(F(".button4:hover { background-color: #1a471f; }"));
+            //current time buttons
+            client.println(F(".button5 {"));
+            client.println(F("  display: inline-block;"));
+            client.println(F("  padding: 15px 30px;"));
+            client.println(F("  margin: 10px;"));
+            client.println(F("  font-size: 18px;"));
+            client.println(F("  color: #fff;"));
+            client.println(F("  background-color: #e024ce;"));
+            client.println(F("  border: none;"));
+            client.println(F("  border-radius: 5px;"));
+            client.println(F("  cursor: pointer;"));
+            client.println(F("}"));
+            client.println(F(".button5:hover { background-color: #e024ce; }"));
+            client.println(F("</style>"));
+            client.println(F("</head>"));
+            //client.println("<body><h1>Hello World</h1></body></html>");
+            client.print("<body><h1>Current Time: ");
+            client.print(now.hour());
+            client.print(":");
+            client.print(now.minute());
+            client.print(":");
+            client.print(now.second());
+            client.println("</h1></body></html>");
+            client.print("<body><h1>Sunrise Time: ");
+            client.print(dispRiseHour);
+            client.print(":");
+            client.print(riseMin);
+            client.println("</h1></body></html>");   
+            client.print("<body><h1>Sunset Time: ");         
+            client.print(dispSetHour);
+            client.print(":");
+            client.print(setMin);
+            client.println("</h1></body></html>");  
+            client.print("<body><h1>Rise/Set Duration: ");
+            client.print(riseDur);
+            client.println("</h1></body></html>");
+            client.print("<body><h1>Current Status: R-");
+            client.print(r);
+            client.print(" G-");
+            client.print(g);
+            client.print(" B-");
+            client.print(b);
+            client.print(" Main Light-");
+            client.print(mainLight);
+            client.println("</h1></body></html>");
+            client.println(F("<button class=\"button\" onclick=\"location.href='/rhp1'\">Rise Hour +1</button>"));
+            client.println(F("<button class=\"button\" onclick=\"location.href='/rhm1'\">Rise Hour -1</button>"));
+            client.println(F("<button class=\"button\" onclick=\"location.href='/circleBounce'\">Rise Minute +1</button>"));
+            client.println(F("<button class=\"button\" onclick=\"location.href='/cubeUpdate'\">Rise Minute +10</button>"));
+            client.println(F("<button class=\"button2\" onclick=\"location.href='/discBounce'\">Set Hour +1</button>"));
+            client.println(F("<button class=\"button2\" onclick=\"location.href='/discBounce'\">Set Hour -1</button>"));
+            client.println(F("<button class=\"button2\" onclick=\"location.href='/circleBounce'\">Set Minute +1</button>"));
+            client.println(F("<button class=\"button2\" onclick=\"location.href='/cubeUpdate'\">Set Minute +10</button>"));
+            client.println(F("<button class=\"button3\" onclick=\"location.href='/discBounce'\">Rise/Set Time +1</button>"));
+            client.println(F("<button class=\"button3\" onclick=\"location.href='/discBounce'\">Rise/Set Time +10</button>"));
+            client.println(F("<button class=\"button3\" onclick=\"location.href='/discBounce'\">Rise/Set Time +30</button>"));
+            client.println(F("<button class=\"button4\" onclick=\"location.href='/discBounce'\">Rise/Set Time -1</button>"));
+            client.println(F("<button class=\"button4\" onclick=\"location.href='/discBounce'\">Rise/Set Time -10</button>"));
+            client.println(F("<button class=\"button4\" onclick=\"location.href='/discBounce'\">Rise/Set Time -30</button>"));
+            client.println(F("<button class=\"button5\" onclick=\"location.href='/discBounce'\">Current Hour +1</button>"));
+            client.println(F("<button class=\"button5\" onclick=\"location.href='/discBounce'\">Current Hour -1</button>"));
+            client.println(F("<button class=\"button5\" onclick=\"location.href='/circleBounce'\">Current Minute +1</button>"));
+            client.println(F("<button class=\"button5\" onclick=\"location.href='/cubeUpdate'\">Current Minute +10</button>"));
+            // client.println(F("<div id=\"terminal\"></div>"));
+            // client.println(F("<script>"));
+            // client.println(F("setInterval(function() {"));
+            // client.println(F("  fetch('/status')"));
+            // client.println(F("    .then(response => response.text())"));
+            // client.println(F("    .then(data => {"));
+            // client.println(F("      document.getElementById('terminal').innerText = data;"));
+            // client.println(F("    });"));
+            // client.println(F("}, 1000);"));
+            // client.println(F("</script>"));
+            // client.println(F("</body></html>"));
+            // client.println();
+
+            // The HTTP response ends with another blank line
+            client.println();
+            // Break out of the while loop
+            break;
+          } else { // if you got a newline, then clear currentLine
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+
+        if (strstr(header, "GET /rhp1") != NULL) {
+          riseHour = riseHour + 1;
+          Serial.println("Adding Hour------------------------------------------------------------------------------------------------");
+          Serial.println("Adding Hour------------------------------------------------------------------------------------------------");
+          Serial.println("Adding Hour------------------------------------------------------------------------------------------------");
+          Serial.println("Adding Hour------------------------------------------------------------------------------------------------");
+          // strncpy(currentFunction, "discBounce", sizeof(currentFunction) - 1);
+          // strncpy(statusMessage, "Running discBounce animation", STATUS_BUFFER_SIZE - 1);
+        } else if (strstr(header, "GET /rhm1") != NULL) {
+          riseHour = riseHour - 1;
+          Serial.println("Subbing Hour-----------------------------------------------------------------------------------------------");
+          Serial.println("Subbing Hour-----------------------------------------------------------------------------------------------");
+          Serial.println("Subbing Hour-----------------------------------------------------------------------------------------------");
+          Serial.println("Subbing Hour-----------------------------------------------------------------------------------------------");
+          // strncpy(currentFunction, "circleBounce", sizeof(currentFunction) - 1);
+          // strncpy(statusMessage, "Running circleBounce animation", STATUS_BUFFER_SIZE - 1);
+        } else if (strstr(header, "GET /cubeUpdate") != NULL) {
+          strncpy(currentFunction, "cubeUpdate", sizeof(currentFunction) - 1);
+          strncpy(statusMessage, "Running cubeUpdate animation", STATUS_BUFFER_SIZE - 1);
+        } else if (strstr(header, "GET /stop") != NULL) {
+          strncpy(currentFunction, "stop", sizeof(currentFunction) - 1);
+          strncpy(statusMessage, "Stopped animations", STATUS_BUFFER_SIZE - 1);
+        } else if (strstr(header, "GET /rpsUpdate") != NULL) {
+          strncpy(currentFunction, "rpsUpdate", sizeof(currentFunction) - 1);
+          strncpy(statusMessage, "Running RPS Update Calculations", STATUS_BUFFER_SIZE - 1);
+        }
+
+      }
+    }
+    // Close the connection
+    client.stop();
+    Serial.println("Client disconnected.");
+    Serial.println("");
+  }
 }
 
 void updateStrip(uint16_t r, uint16_t g, uint16_t b) {
