@@ -46,7 +46,7 @@ RTC_PCF8523 rtc;
 
 dimmerLamp dimmer(outputPin, zerocross); //initialase port for dimmer for MEGA, Leonardo, UNO, Arduino M0, Arduino Zero
 
-const char* ssid = "DayCycleLamp";
+const char* ssid = "DayCycleLamp192.168.4.1"; // IP = 192.168.4.1
 const char* password = "123456789";
 
 WiFiServer server(80);
@@ -104,25 +104,13 @@ void setup() {
   }
   rtc.start();
 
-   // The PCF8523 can be calibrated for:
-  //        - Aging adjustment
-  //        - Temperature compensation
-  //        - Accuracy tuning
-  // The offset mode to use, once every two hours or once every minute.
-  // The offset Offset value from -64 to +63. See the Application Note for calculation of offset values.
-  // https://www.nxp.com/docs/en/application-note/AN11247.pdf
-  // The deviation in parts per million can be calculated over a period of observation. Both the drift (which can be negative)
-  // and the observation period must be in seconds. For accuracy the variation should be observed over about 1 week.
-  // Note: any previous calibration should cancelled prior to any new observation period.
-  // Example - RTC gaining 43 seconds in 1 week
+
   float drift = 43; // seconds plus or minus over oservation period - set to 0 to cancel previous calibration.
   float period_sec = (7 * 86400);  // total obsevation period in seconds (86400 = seconds in 1 day:  7 days = (7 * 86400) seconds )
   float deviation_ppm = (drift / period_sec * 1000000); //  deviation in parts per million (μs)
   float drift_unit = 4.34; // use with offset mode PCF8523_TwoHours
   // float drift_unit = 4.069; //For corrections every min the drift_unit is 4.069 ppm (use with offset mode PCF8523_OneMinute)
   int offset = round(deviation_ppm / drift_unit);
-  // rtc.calibrate(PCF8523_TwoHours, offset); // Un-comment to perform calibration once drift (seconds) and observation period (seconds) are correct
-  // rtc.calibrate(PCF8523_TwoHours, 0); // Un-comment to cancel previous calibration
 
   Serial.print("Offset is "); Serial.println(offset); // Print to control offset
   NeoPixel.begin();  // initialize NeoPixel strip object (REQUIRED)
@@ -174,22 +162,12 @@ void loop() {
   int dispRiseHour = riseHour;
   int dispSetHour = setHour;
 
-  // if (dispRiseHour > 12){
-  //   dispRiseHour = dispRiseHour - 12;
-  // }
-  // if(dispSetHour > 12){
-  //   dispSetHour = dispSetHour - 12;
-  // }
-
   if (stepMsecs >= 1000){
     stepSecs = stepMsecs / 1000;
     stepMsecs = stepMsecs % 1000;
   }
-  // brighten();
-  // darken();
-  DateTime now = rtc.now();
 
-  // analogWrite(2, 125);
+  DateTime now = rtc.now();
 
   totCurTime = (now.hour()*60)+now.minute();
 
@@ -207,12 +185,6 @@ void loop() {
   Serial.print(':');
   Serial.print(now.second(), DEC);
   Serial.println();
-
-  // Serial.print(" since midnight 1/1/1970 = ");
-  // Serial.print(now.unixtime());
-  // Serial.print("s = ");
-  // Serial.print(now.unixtime() / 86400L);
-  // Serial.println("d");
 
   Serial.print("Current Time: ");
   Serial.print(totCurTime);
@@ -280,16 +252,6 @@ void loop() {
 
   if (now >= nextStep){
     if (darken == true){
-      // if (r > 0)
-      // {
-      //   r = r - 1;
-      //   if (b > 0)
-      //   {
-      //     g = g - 2;
-      //     b = b - 2;
-      //   }
-      //   master = master - 1;
-      // }
       if (b > 0){
         b = b - 1;
         if (g > 64){
@@ -325,11 +287,7 @@ void loop() {
   }
 
   Serial.println();
-  // // updateStrip(r, g, b);
-  // darkenF();
-  // delay(3000);
-  // brightenF();
-  // delay(3000);
+
   mainLight = master / 2.55;
   Serial.print("Main Light: ");
   Serial.println(mainLight);
@@ -339,11 +297,6 @@ void loop() {
   }
   
   Serial.println(dimmer.getPower());
-
-  // if (strcmp(currentFunction, "riseHourp1") == 0) {
-  //   riseHour++;
-  //   strncpy(currentFunction, "Null", sizeof(currentFunction) - 1);
-  // }
 
   WiFiClient client = server.available();
   if (client) {
@@ -573,13 +526,11 @@ void loop() {
         } else if (strstr(header, "GET /rhm1") != NULL) {
           if (home == true){
             riseHour--;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rmp1") != NULL) {
           if (home == true){
             riseMin = riseMin + 1;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             if (riseMin >= 60){
               riseMin = riseMin - 60;
@@ -588,24 +539,20 @@ void loop() {
         } else if (strstr(header, "GET /rmp2") != NULL) {
           if (home == true){
             riseMin = riseMin + 10;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             if (riseMin >= 60){
               riseMin = riseMin - 60;
             }
           }
         } else if (strstr(header, "GET /shp1") != NULL) {
-          //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
           if (home == true){
             setHour++;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             Serial.println("We Are Doing a thing--------------------------------------");
           }
         } else if (strstr(header, "GET /shm1") != NULL) {
           if (home == true){
             setHour--;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /smp1") != NULL) {
@@ -614,7 +561,6 @@ void loop() {
             if (setMin >= 60){
               setMin = setMin - 60;
             }
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /smp2") != NULL) {
@@ -623,25 +569,21 @@ void loop() {
             if (setMin >= 60){
               setMin = setMin - 60;
             }
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         }else if (strstr(header, "GET /rstp1") != NULL) {
           if (home == true){
             riseDur++;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rstp2") != NULL) {
           if (home == true){
             riseDur = riseDur + 10;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rstp3") != NULL) {
           if (home == true){
             riseDur = riseDur + 30;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rstm1") != NULL) {
@@ -650,7 +592,6 @@ void loop() {
             if (riseDur <= 1){
               riseDur = 1;
             }
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rstm2") != NULL) {
@@ -659,7 +600,6 @@ void loop() {
             if (riseDur <= 1){
               riseDur = 1;
             }
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /rstm3") != NULL) {
@@ -668,18 +608,15 @@ void loop() {
             if (riseDur <= 1){
               riseDur = 1;
             }
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /chp1") != NULL) {
-          //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
           if (home == true){
             tempNewHours = now.hour() + 1;
             if (tempNewHours > 23){
               tempNewHours = 0;
             }
             rtc.adjust(DateTime(now.year(), now.month(), now.day(), tempNewHours, now.minute(), now.second()));
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             Serial.println("We Are Doing a thing--------------------------------------");
           }
@@ -690,13 +627,11 @@ void loop() {
               tempNewHours = 23;
             }
             rtc.adjust(DateTime(now.year(), now.month(), now.day(), tempNewHours, now.minute(), now.second()));
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
           }
         } else if (strstr(header, "GET /cmp1") != NULL) {
           if (home == true){
             tempNewMins = now.minute() + 1;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             if (tempNewMins >= 60){
               tempNewMins = tempNewMins - 60;
@@ -706,7 +641,6 @@ void loop() {
         } else if (strstr(header, "GET /cmp2") != NULL) {
           if (home == true){
             tempNewMins = now.minute() + 10;
-            //strncpy(currentFunction, "riseHourp1", sizeof(currentFunction) - 1);
             home = false;
             if (tempNewMins >= 60){
               tempNewMins = tempNewMins - 60;
