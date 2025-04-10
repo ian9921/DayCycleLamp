@@ -64,6 +64,9 @@ bool darken = false;
 uint16_t r = 0;
 uint16_t g = 0;
 uint16_t b = 0;
+uint16_t pr = 0;
+uint16_t pg = 0;
+uint16_t pb = 0;
 uint32_t master = 0;
 
 bool manualOff = false;
@@ -235,12 +238,15 @@ void loop() {
     b = 255;
     master = 255*3;
   }
-  else if ((totCurTime >= totSetStart) && (totCurTime < totSetDone)){
+  else if ((totCurTime >= totSetStart) && (totCurTime < totSetDone) && (manualOff == false)){
     darken = true;
     Serial.println("Setting Darken");
-    manualOff = false;
+    //manualOff = false;
   }
   else if ((totCurTime >= totSetDone) || (totCurTime < totRiseStart) || (manualOff == true)){
+    if ((totCurTime >= totSetDone) || (totCurTime < totRiseStart)){
+      manualOff = false;
+    }
     darken == false;
     r = 0;//set to black
     g = 0;
@@ -262,9 +268,7 @@ void loop() {
       } else if (r > 0){
         r = r - 1;
       }
-      if (master > 0){
-        master = master - 3;
-      }
+      master = r + g + b;
     }
     else if (brighten == true){
       if (r < 255)
@@ -278,9 +282,7 @@ void loop() {
           g = g + 1;
         }
       }
-      if (master < (255*3)){
-        master = master + 3;
-      }
+      master = r + g + b;
     }
     delay(stepMsecs);
     nextStep = rtc.now() + TimeSpan(0,0,0,stepSecs);
@@ -288,10 +290,17 @@ void loop() {
 
   Serial.println();
 
-  mainLight = master / 2.55;
+  mainLight = master / 7.65;
   Serial.print("Main Light: ");
   Serial.println(mainLight);
-  updateStrip(r, g, b);
+
+  if ((r != pr) || (b != pb) || (g != pg)){ //only update strip if there's been an actual change
+    updateStrip(r, g, b);
+    pr = r;
+    pb = b;
+    pg = g;
+  }
+
   if ((mainLight >= 10) || (mainLight == 0)){
     dimmer.setPower(mainLight);
   }
@@ -647,9 +656,9 @@ void loop() {
             }
             rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour(), tempNewMins, now.second()));
           }
-        } else if (strstr(header, "GET /cmp2") != NULL) {
+        } else if (strstr(header, "GET /manOff") != NULL) {
           if (home == true){
-            manualOff = true;
+            manualOff = !manualOff;
           }
         } else if (strstr(header, "GET /rpsUpdate") != NULL) {
           strncpy(currentFunction, "rpsUpdate", sizeof(currentFunction) - 1);
