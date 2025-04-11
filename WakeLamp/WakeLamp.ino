@@ -222,8 +222,9 @@ void loop() {
   Serial.print("AP IP address: ");
   Serial.println(IP);
 
-  if (totCurTime >= totRiseStart && totCurTime < totRiseDone && manualOff == false){
+  if ((totCurTime >= totRiseStart) && (totCurTime < totRiseDone) && (manualOff == false)){
     //brighten();
+    darken = false;
     if (manualOff == false)
     {
       brighten = true;
@@ -232,6 +233,7 @@ void loop() {
   }
   else if ((totCurTime >= totRiseDone) && (totCurTime < totSetStart) && (manualOff == false)){
     brighten = false;
+    darken = false;
     Serial.println("Clearing Brighten");
     r = 255;//set brightness to full
     g = 255;
@@ -240,6 +242,7 @@ void loop() {
   }
   else if ((totCurTime >= totSetStart) && (totCurTime < totSetDone) && (manualOff == false)){
     darken = true;
+    brighten = false;
     Serial.println("Setting Darken");
     //manualOff = false;
   }
@@ -247,7 +250,8 @@ void loop() {
     if ((totCurTime >= totSetDone) || (totCurTime < totRiseStart)){
       manualOff = false;
     }
-    darken == false;
+    darken = false;
+    brighten = false;
     r = 0;//set to black
     g = 0;
     b = 0;
